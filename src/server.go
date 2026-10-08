@@ -1,6 +1,7 @@
 package main
 
 import (
+	"SaasySquad-Go/src/application"
 	"fmt"
 	"log"
 	"net/http"
@@ -108,6 +109,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	http.HandleFunc("GET /", homeHandler)
+	http.HandleFunc("POST /auth/register", application.RegisterHandler)
 
 	fmt.Println("Server running on http://localhost:7000")
 
