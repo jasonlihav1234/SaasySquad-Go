@@ -15,8 +15,8 @@ resource "aws_cognito_user_pool" "main" {
 
   account_recovery_setting {
     recovery_mechanism {
-      name    = "verified_email"
-      priorty = 1
+      name     = "verified_email"
+      priority = 1
     }
   }
 }
@@ -49,5 +49,5 @@ output "user_pool_id" {
 }
 
 output "client_id" {
-  value = aws_cognito_user_pool.app.id
+  value = aws_cognito_user_pool_client.app.id
 }

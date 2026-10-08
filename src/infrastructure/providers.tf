@@ -8,3 +8,14 @@ terraform {
     }
   }
 }
+
+provider "aws" {
+  region = "ap-southeast-2"
+
+  # to apply common tags across resources I create
+  default_tags {
+    tags = {
+      ManagedBy = "terraform"
+    }
+  }
+}
