@@ -38,3 +38,28 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("Generating user...")
 }
+
+func LoginHandler(w http.ResponseWriter, r *http.Request) {
+	var payload UserPayload
+
+	err := json.NewDecoder(r.Body).Decode(payload)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	email := payload.Email
+	password := payload.Password
+
+	if email == "" || password == "" {
+		http.Error(w, "Email and password required", 400)
+	}
+
+	device := w.Header().Get("user-agent")
+	if device == "" {
+		device = "null"
+	}
+
+	// return the tokens
+}
