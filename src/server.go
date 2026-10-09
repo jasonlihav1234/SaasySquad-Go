@@ -2,10 +2,20 @@ package main
 
 import (
 	"SaasySquad-Go/src/application"
+	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
+	"os"
 )
+
+type CognitoActions struct {
+	CognitoClient *cognitoidentityprovider.Client
+}
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -108,8 +118,22 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	_ = godotenv.Load()
+	ctx := context.Background()
+
+	// anonymous credentials = SDK sends unsigned requests, works on any machine, since we use user facing calls doesn't matter
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion("ap-southeast-2"),
+		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	cognitoClientId := os.Getenv("COGNITO_CLIENT_ID")
+
 	http.HandleFunc("GET /", homeHandler)
-	http.HandleFunc("POST /auth/register", application.RegisterHandler)
+	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId))
 
 	fmt.Println("Server running on http://localhost:7000")
 
