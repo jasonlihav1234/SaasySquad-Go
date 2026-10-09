@@ -2,10 +2,13 @@ package application
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	_ "github.com/lib/pq"
+	"log"
 	"net/http"
 )
 
@@ -19,7 +22,7 @@ type CognitoActions struct {
 	CognitoClient *cognitoidentityprovider.Client
 }
 
-func (actor CognitoActions) Register(ctx context.Context, clientId string, email string, password string) (bool, error) {
+func (actor CognitoActions) Register(ctx context.Context, clientId string, email string, password string) (string, error) {
 	output, err := actor.CognitoClient.SignUp(ctx, &cognitoidentityprovider.SignUpInput{
 		ClientId: aws.String(clientId),
 		Username: aws.String(email),
@@ -27,13 +30,13 @@ func (actor CognitoActions) Register(ctx context.Context, clientId string, email
 	})
 
 	if err != nil {
-		return false, err
+		return "", err
 	}
 
-	return output.UserConfirmed, err
+	return aws.ToString(output.UserSub), err
 }
 
-func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string) http.HandlerFunc {
+func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload UserPayload
 
@@ -51,7 +54,18 @@ func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string
 			CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
 		}
 
-		actor.Register(ctx, cognitoClientId, email, password)
+		userId, err := actor.Register(ctx, cognitoClientId, email, password)
+		if err != nil {
+			log.Print("Cognito user failed to create")
+			return
+		}
+
+		_, err = db.Exec("INSERT INTO user_v2 (id, email) VALUES ($1, $2)", userId, email)
+		if err != nil {
+			log.Print(err.Error())
+			http.Error(w, err.Error(), 500)
+			return
+		}
 
 		fmt.Println("Created User")
 	}

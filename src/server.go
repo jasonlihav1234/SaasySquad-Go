@@ -147,7 +147,7 @@ func main() {
 	}
 
 	http.HandleFunc("GET /", homeHandler)
-	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId))
+	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId, db))
 
 	fmt.Println("Server running on http://localhost:7000")
 
