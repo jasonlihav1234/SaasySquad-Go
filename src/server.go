@@ -3,11 +3,13 @@ package main
 import (
 	"SaasySquad-Go/src/application"
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"os"
@@ -118,7 +120,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	_ = godotenv.Load()
+	_ = godotenv.Load("../.env")
 	ctx := context.Background()
 
 	// anonymous credentials = SDK sends unsigned requests, works on any machine, since we use user facing calls doesn't matter
@@ -131,6 +133,18 @@ func main() {
 	}
 
 	cognitoClientId := os.Getenv("COGNITO_CLIENT_ID")
+	psqlInfo := os.Getenv("POSTGRES_URL")
+
+	db, err := sql.Open("postgres", psqlInfo)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		panic(err)
+	}
 
 	http.HandleFunc("GET /", homeHandler)
 	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId))
