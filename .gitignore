@@ -3,3 +3,4 @@ src/infrastructure/*.tfstate
 src/infrastructure/*.tfstate.*
 src/infrastructure/*.tfvars
 src/infrastructure/*.tfvars.json
+.env
