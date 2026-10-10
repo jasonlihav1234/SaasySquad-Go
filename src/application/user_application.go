@@ -11,6 +11,7 @@ import (
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
+	"strings"
 )
 
 type UserPayload struct {
@@ -155,11 +156,11 @@ func LoginHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) http.Handl
 
 		if err != nil {
 			log.Println("Failed to unmarshal login information")
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
 
-		email := payload.Email
+		email := strings.TrimSpace(payload.Email)
 		password := payload.Password
 
 		if email == "" || password == "" {
@@ -193,15 +194,16 @@ func LoginHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) http.Handl
 			http.SetCookie(w, &http.Cookie{
 				Name:     "refresh_token",
 				Value:    *refreshToken,
-				Path:     "/auth/refresh",
+				Path:     "/auth/refresh", // browser only sends to this endpoint, not attached on every request
 				MaxAge:   30 * 24 * 60 * 60,
-				HttpOnly: true,
-				Secure:   true,
-				SameSite: http.SameSiteStrictMode,
+				HttpOnly: true,                    // javascript cannot read it, limits damage from xss
+				Secure:   false,                   // secure = true means that only sent over HTTPS
+				SameSite: http.SameSiteStrictMode, // never sent on cross-site requests
 			})
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store") // browsers don't cache token
 		json.NewEncoder(w).Encode(map[string]any{
 			"access_token": *accessToken,
 			"token_type":   "Bearer",
