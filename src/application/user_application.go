@@ -18,6 +18,11 @@ type UserPayload struct {
 	Username string
 }
 
+type UserConfirmPayload struct {
+	Email            string
+	ConfirmationCode string
+}
+
 type CognitoActions struct {
 	CognitoClient *cognitoidentityprovider.Client
 }
@@ -41,15 +46,16 @@ func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string
 		var payload UserPayload
 
 		err := json.NewDecoder(r.Body).Decode(&payload)
+		defer r.Body.Close()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		defer r.Body.Close()
 
 		email := payload.Email
 		password := payload.Password
 
+		// sdk split into shared settings and service client, client needs settings
 		actor := CognitoActions{
 			CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
 		}
@@ -68,6 +74,38 @@ func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string
 		}
 
 		fmt.Println("Created User")
+	}
+}
+
+func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// payload would be email and confirmation code
+		var payload UserConfirmPayload
+
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		defer r.Body.Close()
+		if err != nil {
+			log.Print(err.Error())
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		email := payload.Email
+		confirmationCode := payload.ConfirmationCode
+
+		if email == "" || confirmationCode == "" {
+			log.Print("No email or confirmation code provided")
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		actor.ConfirmRegister()
+
+		fmt.Println("Confirmed User Register")
 	}
 }
 
