@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	cognitotypes "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
@@ -49,6 +50,23 @@ func (actor CognitoActions) ConfirmRegister(ctx context.Context, clientId string
 	})
 
 	return err
+}
+
+func (actor CognitoActions) Login(ctx context.Context, clientId string, email string, password string) (*cognitotypes.AuthenticationResultType, error) {
+	output, err := actor.CognitoClient.InitiateAuth(ctx, &cognitoidentityprovider.InitiateAuthInput{
+		AuthFlow: cognitotypes.AuthFlowTypeUserPasswordAuth,
+		ClientId: aws.String(clientId),
+		AuthParameters: map[string]string{
+			"USERNAME": email,
+			"PASSWORD": password,
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return output.AuthenticationResult, err
 }
 
 func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
@@ -124,27 +142,45 @@ func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) 
 	}
 }
 
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
-	var payload UserPayload
-
-	err := json.NewDecoder(r.Body).Decode(&payload)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
-	email := payload.Email
-	password := payload.Password
-
-	if email == "" || password == "" {
-		http.Error(w, "Email and password required", 400)
+func LoginHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
 	}
 
-	device := w.Header().Get("user-agent")
-	if device == "" {
-		device = "null"
-	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload UserPayload
 
-	// return the tokens
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		defer r.Body.Close()
+
+		if err != nil {
+			log.Println("Failed to unmarshal login information")
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		email := payload.Email
+		password := payload.Password
+
+		if email == "" || password == "" {
+			log.Println("Email or password not passed in")
+			http.Error(w, "Email and password required", 400)
+			return
+		}
+
+		device := w.Header().Get("user-agent")
+		if device == "" {
+			device = "null"
+		}
+
+		output, err := actor.Login(r.Context(), cognitoClientId, email, password)
+		if err != nil {
+			log.Print(err.Error())
+			http.Error(w, err.Error(), 500)
+			return
+
+		}
+
+		fmt.Printf("Access Token: %v\nRefreshToken: %v\n", output.AccessToken, output.RefreshToken)
+	}
 }
