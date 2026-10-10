@@ -176,11 +176,36 @@ func LoginHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) http.Handl
 		output, err := actor.Login(r.Context(), cognitoClientId, email, password)
 		if err != nil {
 			log.Print(err.Error())
-			http.Error(w, err.Error(), 500)
+			http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 			return
 
 		}
 
-		fmt.Printf("Access Token: %v\nRefreshToken: %v\n", output.AccessToken, output.RefreshToken)
+		if output == nil || output.AccessToken == nil {
+			http.Error(w, "Unexpected response from auth provider", http.StatusInternalServerError)
+			return
+		}
+
+		accessToken := output.AccessToken
+		refreshToken := output.RefreshToken
+
+		if refreshToken != nil {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "refresh_token",
+				Value:    *refreshToken,
+				Path:     "/auth/refresh",
+				MaxAge:   30 * 24 * 60 * 60,
+				HttpOnly: true,
+				Secure:   true,
+				SameSite: http.SameSiteStrictMode,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": *accessToken,
+			"token_type":   "Bearer",
+			"expires_in":   output.ExpiresIn,
+		})
 	}
 }
