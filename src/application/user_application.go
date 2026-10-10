@@ -41,12 +41,22 @@ func (actor CognitoActions) Register(ctx context.Context, clientId string, email
 	return aws.ToString(output.UserSub), err
 }
 
+func (actor CognitoActions) ConfirmRegister(ctx context.Context, clientId string, email string, confirmationCode string) error {
+	_, err := actor.CognitoClient.ConfirmSignUp(ctx, &cognitoidentityprovider.ConfirmSignUpInput{
+		ClientId:         aws.String(clientId),
+		Username:         aws.String(email),
+		ConfirmationCode: aws.String(confirmationCode),
+	})
+
+	return err
+}
+
 func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload UserPayload
+		defer r.Body.Close()
 
 		err := json.NewDecoder(r.Body).Decode(&payload)
-		defer r.Body.Close()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -85,9 +95,9 @@ func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) 
 	return func(w http.ResponseWriter, r *http.Request) {
 		// payload would be email and confirmation code
 		var payload UserConfirmPayload
+		defer r.Body.Close()
 
 		err := json.NewDecoder(r.Body).Decode(&payload)
-		defer r.Body.Close()
 		if err != nil {
 			log.Print(err.Error())
 			http.Error(w, err.Error(), 500)
@@ -99,11 +109,16 @@ func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) 
 
 		if email == "" || confirmationCode == "" {
 			log.Print("No email or confirmation code provided")
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "No email or confirmation code provided", http.StatusBadRequest)
 			return
 		}
 
-		actor.ConfirmRegister()
+		err = actor.ConfirmRegister(r.Context(), cognitoClientId, email, confirmationCode)
+		if err != nil {
+			log.Print(err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
 		fmt.Println("Confirmed User Register")
 	}

@@ -124,6 +124,7 @@ func main() {
 	ctx := context.Background()
 
 	// anonymous credentials = SDK sends unsigned requests, works on any machine, since we use user facing calls doesn't matter
+	// aws.Config = hold settings every AWS service client needs
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion("ap-southeast-2"),
 		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
@@ -148,6 +149,7 @@ func main() {
 
 	http.HandleFunc("GET /", homeHandler)
 	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId, db))
+	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, cognitoClientId, db))
 
 	fmt.Println("Server running on http://localhost:7000")
 
