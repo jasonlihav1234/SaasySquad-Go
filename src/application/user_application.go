@@ -70,6 +70,22 @@ func (actor CognitoActions) Login(ctx context.Context, clientId string, email st
 	return output.AuthenticationResult, err
 }
 
+func (actor CognitoActions) Refresh(ctx context.Context, clientId string, refreshToken string) (*cognitotypes.AuthenticationResultType, error) {
+	output, err := actor.CognitoClient.InitiateAuth(ctx, &cognitoidentityprovider.InitiateAuthInput{
+		AuthFlow: cognitotypes.AuthFlowTypeRefreshTokenAuth,
+		ClientId: aws.String(clientId),
+		AuthParameters: map[string]string{
+			"REFRESH_TOKEN": refreshToken,
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return output.AuthenticationResult, err
+}
+
 func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload UserPayload
