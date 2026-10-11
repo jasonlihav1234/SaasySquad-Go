@@ -29,10 +29,6 @@ type CognitoActions struct {
 	CognitoClient *cognitoidentityprovider.Client
 }
 
-type RefreshPayload struct {
-	AccessToken string
-}
-
 func (actor CognitoActions) Register(ctx context.Context, clientId string, email string, password string) (string, error) {
 	output, err := actor.CognitoClient.SignUp(ctx, &cognitoidentityprovider.SignUpInput{
 		ClientId: aws.String(clientId),
@@ -239,17 +235,17 @@ func RefreshHandler(cfg aws.Config, cognitoClientId string) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		// body should contain the access token
-		var refreshPayload RefreshPayload
-		err := json.NewDecoder(r.Body).Decode(&refreshPayload)
 		defer r.Body.Close()
-
+		cookie, err := r.Cookie("refresh_token")
 		if err != nil {
 			log.Println(err.Error())
-			http.Error(w, "Failed to decode body", http.StatusBadRequest)
+			http.Error(w, "Unauthorized: missing refresh token", http.StatusUnauthorized)
 			return
 		}
 
-		output, err := actor.Refresh(r.Context(), cognitoClientId, refreshPayload.AccessToken)
+		refreshToken := cookie.Value
+
+		output, err := actor.Refresh(r.Context(), cognitoClientId, refreshToken)
 		if err != nil {
 			log.Println(err.Error())
 			http.Error(w, "Failed to refresh the token", 500)
