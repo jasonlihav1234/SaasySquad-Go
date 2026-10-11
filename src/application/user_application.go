@@ -29,6 +29,10 @@ type CognitoActions struct {
 	CognitoClient *cognitoidentityprovider.Client
 }
 
+type RefreshPayload struct {
+	AccessToken string
+}
+
 func (actor CognitoActions) Register(ctx context.Context, clientId string, email string, password string) (string, error) {
 	output, err := actor.CognitoClient.SignUp(ctx, &cognitoidentityprovider.SignUpInput{
 		ClientId: aws.String(clientId),
@@ -222,6 +226,41 @@ func LoginHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) http.Handl
 		w.Header().Set("Cache-Control", "no-store") // browsers don't cache token
 		json.NewEncoder(w).Encode(map[string]any{
 			"access_token": *accessToken,
+			"token_type":   "Bearer",
+			"expires_in":   output.ExpiresIn,
+		})
+	}
+}
+
+func RefreshHandler(cfg aws.Config, cognitoClientId string) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// body should contain the access token
+		var refreshPayload RefreshPayload
+		err := json.NewDecoder(r.Body).Decode(&refreshPayload)
+		defer r.Body.Close()
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to decode body", http.StatusBadRequest)
+			return
+		}
+
+		output, err := actor.Refresh(r.Context(), cognitoClientId, refreshPayload.AccessToken)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to refresh the token", 500)
+			return
+		}
+
+		// output now contains the new access token
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": *output.AccessToken,
 			"token_type":   "Bearer",
 			"expires_in":   output.ExpiresIn,
 		})
