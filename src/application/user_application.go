@@ -86,6 +86,14 @@ func (actor CognitoActions) Refresh(ctx context.Context, clientId string, refres
 	return output.AuthenticationResult, err
 }
 
+func (actor CognitoActions) Logout(ctx context.Context, clientId string, accessToken string) error {
+	_, err := actor.CognitoClient.GlobalSignOut(ctx, &cognitoidentityprovider.GlobalSignOutInput{
+		AccessToken: aws.String(accessToken),
+	})
+
+	return err
+}
+
 func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload UserPayload
@@ -260,5 +268,38 @@ func RefreshHandler(cfg aws.Config, cognitoClientId string) http.HandlerFunc {
 			"token_type":   "Bearer",
 			"expires_in":   output.ExpiresIn,
 		})
+	}
+}
+
+func LogoutHandler(cfg aws.Config, cognitoClientId string) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			log.Println("No bearer token provided")
+			http.Error(w, "No bearer token provided", http.StatusBadRequest)
+			return
+		}
+
+		authArr := strings.SplitN(authHeader, " ", 2)
+		if len(authArr) != 2 || strings.ToLower(authArr[0]) != "bearer" {
+			log.Println("Invalid authorizaiton header")
+			http.Error(w, "Invalid authorization header", http.StatusBadRequest)
+			return
+		}
+
+		accessToken := authArr[1]
+		err := actor.Logout(r.Context(), cognitoClientId, accessToken)
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to logout user", 500)
+			return
+		}
 	}
 }
