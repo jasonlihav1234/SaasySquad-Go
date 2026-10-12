@@ -29,6 +29,10 @@ type CognitoActions struct {
 	CognitoClient *cognitoidentityprovider.Client
 }
 
+type UserForgotPaswordPayload struct {
+	Email string
+}
+
 func (actor CognitoActions) Register(ctx context.Context, clientId string, email string, password string) (string, error) {
 	output, err := actor.CognitoClient.SignUp(ctx, &cognitoidentityprovider.SignUpInput{
 		ClientId: aws.String(clientId),
@@ -89,6 +93,15 @@ func (actor CognitoActions) Refresh(ctx context.Context, clientId string, refres
 func (actor CognitoActions) Logout(ctx context.Context, clientId string, accessToken string) error {
 	_, err := actor.CognitoClient.GlobalSignOut(ctx, &cognitoidentityprovider.GlobalSignOutInput{
 		AccessToken: aws.String(accessToken),
+	})
+
+	return err
+}
+
+func (actor CognitoActions) ForgotPassword(ctx context.Context, clientId string, email string) error {
+	_, err := actor.CognitoClient.ForgotPassword(ctx, &cognitoidentityprovider.ForgotPasswordInput{
+		ClientId: aws.String(clientId),
+		Username: aws.String(email),
 	})
 
 	return err
@@ -300,6 +313,32 @@ func LogoutHandler(cfg aws.Config, cognitoClientId string) http.HandlerFunc {
 			log.Println(err.Error())
 			http.Error(w, "Failed to logout user", 500)
 			return
+		}
+	}
+}
+
+func ForgotPasswordHandler(cfg aws.Config, cognitoClientId string) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var payload UserForgotPaswordPayload
+		err := json.NewDecoder(r.Body).Decode(&payload)
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to decode body", http.StatusBadRequest)
+			return
+		}
+
+		err = actor.ForgotPassword(r.Context(), cognitoClientId, payload.Email)
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to start password recovery steps", 500)
 		}
 	}
 }
