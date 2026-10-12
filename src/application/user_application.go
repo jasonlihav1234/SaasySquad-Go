@@ -33,6 +33,12 @@ type UserForgotPaswordPayload struct {
 	Email string
 }
 
+type UserConfirmPasswordPayload struct {
+	Email            string
+	Password         string
+	ConfirmationCode string
+}
+
 func (actor CognitoActions) Register(ctx context.Context, clientId string, email string, password string) (string, error) {
 	output, err := actor.CognitoClient.SignUp(ctx, &cognitoidentityprovider.SignUpInput{
 		ClientId: aws.String(clientId),
@@ -102,6 +108,17 @@ func (actor CognitoActions) ForgotPassword(ctx context.Context, clientId string,
 	_, err := actor.CognitoClient.ForgotPassword(ctx, &cognitoidentityprovider.ForgotPasswordInput{
 		ClientId: aws.String(clientId),
 		Username: aws.String(email),
+	})
+
+	return err
+}
+
+func (actor CognitoActions) ConfirmForgotPassword(ctx context.Context, clientId string, confirmationCode string, newPassword string, email string) error {
+	_, err := actor.CognitoClient.ConfirmForgotPassword(ctx, &cognitoidentityprovider.ConfirmForgotPasswordInput{
+		ClientId:         aws.String(clientId),
+		ConfirmationCode: aws.String(confirmationCode),
+		Password:         aws.String(newPassword),
+		Username:         aws.String(email),
 	})
 
 	return err
@@ -339,6 +356,34 @@ func ForgotPasswordHandler(cfg aws.Config, cognitoClientId string) http.HandlerF
 		if err != nil {
 			log.Println(err.Error())
 			http.Error(w, "Failed to start password recovery steps", 500)
+			return
+		}
+	}
+}
+
+func ConfirmForgotPasswordHandler(cfg aws.Config, cognitoClientId string) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var payload UserConfirmPasswordPayload
+		err := json.NewDecoder(r.Body).Decode(&payload)
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to decode body", http.StatusBadRequest)
+			return
+		}
+
+		err = actor.ConfirmForgotPassword(r.Context(), cognitoClientId, payload.ConfirmationCode, payload.Password, payload.Email)
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to confirm new password", 500)
+			return
 		}
 	}
 }
