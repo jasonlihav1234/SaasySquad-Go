@@ -152,6 +152,7 @@ func main() {
 	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, cognitoClientId, db))
 	http.HandleFunc("POST /auth/login", application.LoginHandler(cfg, cognitoClientId, db))
 	http.HandleFunc("POST /auth/refresh", application.RefreshHandler(cfg, cognitoClientId))
+	http.HandleFunc("POST /auth/logout", application.LogoutHandler(cfg, cognitoClientId))
 
 	fmt.Println("Server running on http://localhost:7000")
 
