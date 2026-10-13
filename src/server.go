@@ -133,7 +133,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	adminCfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion("ap-southeast-2"),
+	)
+
 	cognitoClientId := os.Getenv("COGNITO_CLIENT_ID")
+	cognitoUserPoolId := os.Getenv("COGNITO_USER_POOL_ID")
 	psqlInfo := os.Getenv("POSTGRES_URL")
 
 	db, err := sql.Open("postgres", psqlInfo)
@@ -156,6 +161,7 @@ func main() {
 	http.HandleFunc("POST /auth/forgot-password", application.ForgotPasswordHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/reset-password", application.ConfirmForgotPasswordHandler(cfg, cognitoClientId))
 	http.HandleFunc("GET /profile", application.GetProfileHandler(cfg))
+	http.HandleFunc("GET /users/{email}", application.AdminGetProfileHandler(adminCfg, cognitoUserPoolId))
 
 	fmt.Println("Server running on http://localhost:7000")
 
