@@ -155,6 +155,7 @@ func main() {
 	http.HandleFunc("POST /auth/logout", application.LogoutHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/forgot-password", application.ForgotPasswordHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/reset-password", application.ConfirmForgotPasswordHandler(cfg, cognitoClientId))
+	http.HandleFunc("GET /profile", application.GetProfileHandler(cfg))
 
 	fmt.Println("Server running on http://localhost:7000")
 

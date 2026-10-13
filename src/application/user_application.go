@@ -435,5 +435,7 @@ func GetProfileHandler(cfg aws.Config) http.HandlerFunc {
 			http.Error(w, "Failed to encode json", 500)
 			return
 		}
+
+		fmt.Println("Successfully retrieved user")
 	}
 }
