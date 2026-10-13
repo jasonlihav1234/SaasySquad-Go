@@ -132,6 +132,15 @@ func (actor CognitoActions) GetProfile(ctx context.Context, accessToken string) 
 	return output, err
 }
 
+func (actor CognitoActions) AdminGetProfile(ctx context.Context, userPoolId string, email string) (*cognitoidentityprovider.AdminGetUserOutput, error) {
+	output, err := actor.CognitoClient.AdminGetUser(ctx, &cognitoidentityprovider.AdminGetUserInput{
+		UserPoolId: aws.String(userPoolId),
+		Username:   aws.String(email),
+	})
+
+	return output, err
+}
+
 func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload UserPayload
@@ -437,5 +446,39 @@ func GetProfileHandler(cfg aws.Config) http.HandlerFunc {
 		}
 
 		fmt.Println("Successfully retrieved user")
+	}
+}
+
+func AdminGetProfileHandler(cfg aws.Config, cognitoPoolId string) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body.Close()
+
+		email := r.PathValue("email")
+		if email == "" {
+			log.Println("No userId provided")
+			http.Error(w, "No userId provided", 500)
+			return
+		}
+
+		output, err := actor.AdminGetProfile(r.Context(), cognitoPoolId, email)
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to obtain profile via admin", 500)
+			return
+		}
+
+		err = json.NewEncoder(w).Encode(output)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to encode response into json", 500)
+			return
+		}
+
+		fmt.Println("Successfully obtained a profile via admin")
 	}
 }
