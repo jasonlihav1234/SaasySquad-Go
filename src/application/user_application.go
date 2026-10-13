@@ -124,6 +124,14 @@ func (actor CognitoActions) ConfirmForgotPassword(ctx context.Context, clientId 
 	return err
 }
 
+func (actor CognitoActions) GetProfile(ctx context.Context, accessToken string) (*cognitoidentityprovider.GetUserOutput, error) {
+	output, err := actor.CognitoClient.GetUser(ctx, &cognitoidentityprovider.GetUserInput{
+		AccessToken: aws.String(accessToken),
+	})
+
+	return output, err
+}
+
 func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload UserPayload
@@ -383,6 +391,48 @@ func ConfirmForgotPasswordHandler(cfg aws.Config, cognitoClientId string) http.H
 		if err != nil {
 			log.Println(err.Error())
 			http.Error(w, "Failed to confirm new password", 500)
+			return
+		}
+	}
+}
+
+func GetProfileHandler(cfg aws.Config) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		authHeader := r.Header.Get("Authorization")
+
+		if authHeader == "" {
+			log.Println("No access token provided")
+			http.Error(w, "No access token provided", 500)
+			return
+		}
+
+		authSplit := strings.SplitN(authHeader, " ", 2)
+
+		if len(authSplit) != 2 || strings.ToLower(authSplit[0]) != "bearer" {
+			log.Println("Invalid authorization header")
+			http.Error(w, "Invalid authorization header", 500)
+			return
+		}
+
+		accessToken := authSplit[1]
+		output, err := actor.GetProfile(r.Context(), accessToken)
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to obtain profile of user", 500)
+			return
+		}
+
+		err = json.NewEncoder(w).Encode(output)
+
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to encode json", 500)
 			return
 		}
 	}
