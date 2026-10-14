@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"log"
@@ -21,6 +22,7 @@ func (u *UserRepository) CreateItemQuery(
 	imageUrl string,
 	categoryName string,
 	tags []string,
+	ctx context.Context,
 ) error {
 	if len(tags) == 0 {
 		log.Println("No tags provided for item")
@@ -32,5 +34,19 @@ func (u *UserRepository) CreateItemQuery(
 		tags[i] = strings.ToLower(s)
 	}
 
-	output, err := u.DB.Exec()
+	tx, err := u.DB.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	output, err := u.DB.ExecContext(ctx,
+		`
+		insert into categories (category_id, category_name)
+		values ($1, $2)
+		on conflict (category_name)
+		do updat set category_name = excluded.category_name
+		returning category_id
+		`,
+	)
 }
