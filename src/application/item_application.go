@@ -73,5 +73,17 @@ func createItem(cfg aws.Config) http.HandlerFunc {
 			return
 		}
 
+		if payload.categoryName == "" ||
+			payload.description == "" ||
+			payload.imageUrl == "" ||
+			payload.itemName == "" ||
+			payload.price == 0.0 ||
+			payload.quantityAvailable == 0 ||
+			len(payload.tags) == 0 {
+			log.Println("Missing fields in payload")
+			http.Error(w, "Missing fields in item payload", 500)
+			return
+		}
+
 	}
 }
