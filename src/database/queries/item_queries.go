@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"log"
 	"strings"
 	"time"
@@ -27,8 +28,19 @@ type Item struct {
 	CategoryId        uuid.UUID
 }
 
+type Tag struct {
+	TagId   uuid.UUID
+	TagName string
+}
+
+type ItemTag struct {
+	ItemId  uuid.UUID
+	TagId   uuid.UUID
+	TagName string
+}
+
 func (u *UserRepository) CreateItemQuery(
-	itemId string,
+	itemId uuid.UUID,
 	sellerId string,
 	itemName string,
 	description string,
@@ -38,10 +50,10 @@ func (u *UserRepository) CreateItemQuery(
 	categoryName string,
 	tags []string,
 	ctx context.Context,
-) error {
+) (uuid.UUID, error) {
 	if len(tags) == 0 {
 		log.Println("No tags provided for item")
-		return errors.New("No tags provided for item")
+		return uuid.Nil, errors.New("No tags provided for item")
 	}
 
 	// need to pass db and lower every tag
@@ -51,13 +63,13 @@ func (u *UserRepository) CreateItemQuery(
 
 	tx, err := u.DB.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 	defer tx.Rollback()
 
 	id, err := uuid.NewV7()
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
 	var categoryId uuid.UUID
@@ -72,7 +84,7 @@ func (u *UserRepository) CreateItemQuery(
 		id, strings.ToLower(categoryName),
 	).Scan(&categoryId)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
 	var item Item
@@ -104,11 +116,74 @@ func (u *UserRepository) CreateItemQuery(
 	returning *
 	`
 	isoString := time.Now().Format(time.RFC3339)
-	err = u.DB.QueryRowContext(ctx, itemQuery, itemId, sellerId, itemName, description, price, quantityAvailable, imageUrl, isoString, isoString, categoryId).Scan(&item)
+	err = u.DB.QueryRowContext(ctx,
+		itemQuery, itemId,
+		sellerId,
+		itemName,
+		description,
+		price,
+		quantityAvailable,
+		imageUrl,
+		isoString,
+		isoString,
+		categoryId).Scan(&item)
 
-	if err := tx.Commit(); err != nil {
-		return err
+	insertedItem := item.ItemId
+	var tagsToInsert []Tag
+
+	for _, tagName := range tags {
+		newUUID, err := uuid.NewV7()
+		if err != nil {
+			return uuid.Nil, err
+		}
+
+		tagsToInsert = append(tagsToInsert, Tag{
+			TagId:   newUUID,
+			TagName: tagName,
+		})
 	}
 
-	return nil
+	_, err = u.DB.Exec(
+		`
+	insert into tags $1
+	on conflict (tag_name) do nothing
+	`, pq.Array(tagsToInsert))
+
+	tagQuery := `
+		select tag_id, tag_name
+		from tags
+		where tag_name = any($1)
+	`
+
+	rows, err := u.DB.QueryContext(ctx, tagQuery, pq.Array(tags))
+	if err != nil {
+		return uuid.Nil, err
+	}
+	defer rows.Close()
+
+	var itemTags []ItemTag
+	for rows.Next() {
+		var it ItemTag
+		if err := rows.Scan(&it.TagId, &it.TagName); err != nil {
+			return uuid.Nil, err
+		}
+
+		it.ItemId = itemId
+		itemTags = append(itemTags, it)
+	}
+
+	itemInsertQuery := `
+		insert into item_tags $1
+		on conflict do nothing
+	`
+	_, err = u.DB.Exec(itemInsertQuery, pq.Array(itemTags))
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return uuid.Nil, err
+	}
+
+	return insertedItem, nil
 }
