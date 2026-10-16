@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"log"
@@ -119,6 +120,16 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(htmlString))
 }
 
+func CreatePgPool(ctx context.Context) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(os.Getenv("POSTGRES_URL"))
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.MaxConns = 10
+	return pgxpool.NewWithConfig(ctx, cfg)
+}
+
 func main() {
 	_ = godotenv.Load("../.env")
 	ctx := context.Background()
@@ -137,25 +148,19 @@ func main() {
 		config.WithRegion("ap-southeast-2"),
 	)
 
+	pool, err := CreatePgPool(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer pool.Close()
+
 	cognitoClientId := os.Getenv("COGNITO_CLIENT_ID")
 	cognitoUserPoolId := os.Getenv("COGNITO_USER_POOL_ID")
-	psqlInfo := os.Getenv("POSTGRES_URL")
-
-	db, err := sql.Open("postgres", psqlInfo)
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
-	err = db.Ping()
-	if err != nil {
-		panic(err)
-	}
 
 	http.HandleFunc("GET /", homeHandler)
-	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId, db))
-	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, cognitoClientId, db))
-	http.HandleFunc("POST /auth/login", application.LoginHandler(cfg, cognitoClientId, db))
+	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId, pool))
+	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, cognitoClientId, pool))
+	http.HandleFunc("POST /auth/login", application.LoginHandler(cfg, cognitoClientId, pool))
 	http.HandleFunc("POST /auth/refresh", application.RefreshHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/logout", application.LogoutHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/forgot-password", application.ForgotPasswordHandler(cfg, cognitoClientId))

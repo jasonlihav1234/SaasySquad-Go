@@ -4,15 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lib/pq"
 	"log"
 	"strings"
 	"time"
 )
 
-type UserRepository struct {
-	DB *sql.DB
+type ItemRepository struct {
+	DB *pgxpool.Pool
 }
 
 type Item struct {
@@ -39,7 +41,7 @@ type ItemTag struct {
 	TagName string
 }
 
-func (u *UserRepository) CreateItemQuery(
+func (ir *ItemRepository) CreateItemQuery(
 	itemId uuid.UUID,
 	sellerId string,
 	itemName string,
@@ -59,6 +61,30 @@ func (u *UserRepository) CreateItemQuery(
 	// need to pass db and lower every tag
 	for i, s := range tags {
 		tags[i] = strings.ToLower(s)
+	}
+
+	tx, err := ir.DB.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	newCategoryId, err := uuid.NewV7()
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	var categoryId uuid.UUID
+	err = tx.QueryRow(ctx, `
+			insert into categories (category_id, category_name)
+			values ($1, $2)
+			on conflict (category_name)
+			do update set category_name = excluded.category_name
+			returning category id`,
+		newCategoryId, strings.ToLower(categoryName),
+	).Scan(&categoryId)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("upsert category: %w", err)
 	}
 
 	tx, err := u.DB.BeginTx(ctx, &sql.TxOptions{})
