@@ -87,129 +87,48 @@ func (ir *ItemRepository) CreateItemQuery(
 		return uuid.Nil, fmt.Errorf("upsert category: %w", err)
 	}
 
-	tx, err := u.DB.BeginTx(ctx, &sql.TxOptions{})
-	if err != nil {
-		return uuid.Nil, err
-	}
-	defer tx.Rollback()
-
-	id, err := uuid.NewV7()
-	if err != nil {
-		return uuid.Nil, err
-	}
-
-	var categoryId uuid.UUID
-	err = u.DB.QueryRowContext(ctx,
-		`
-		insert into categories (category_id, category_name)
-		values ($1, $2)
-		on conflict (category_name)
-		do update set category_name = excluded.category_name
-		returning category_id
-		`,
-		id, strings.ToLower(categoryName),
-	).Scan(&categoryId)
-	if err != nil {
-		return uuid.Nil, err
-	}
-
-	var item Item
-	itemQuery := `
-	insert into items (
-		item_id,
-		seller_id,
-		item_name,
-		description,
-		price,
-		quantity_available,
-		image_url,
-		created_at,
-		last_updated,
-		category_id
+	_, err = tx.Exec(ctx, `
+			insert into items (
+				item_id, seller_id, item_name, description, price,
+				quantity_available, image_url, category_id
+			) values ($1, $2, $3, $4, $5::numeric, $6, $7, $8)`,
+		itemId, sellerId, categoryName, description, price,
+		quantityAvailable, imageUrl, categoryId,
 	)
-	values (
-		$1,
-		$2,
-		$3,
-		$4,
-		$5,
-		$6,
-		$7,
-		$8,
-		$9,
-		$10
-	)
-	returning *
-	`
-	isoString := time.Now().Format(time.RFC3339)
-	err = u.DB.QueryRowContext(ctx,
-		itemQuery, itemId,
-		sellerId,
-		itemName,
-		description,
-		price,
-		quantityAvailable,
-		imageUrl,
-		isoString,
-		isoString,
-		categoryId).Scan(&item)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("insert item: %w", err)
+	}
 
-	insertedItem := item.ItemId
-	var tagsToInsert []Tag
-
-	for _, tagName := range tags {
-		newUUID, err := uuid.NewV7()
-		if err != nil {
+	tagIds := make([]uuid.UUID, len(tags))
+	for i := range tags {
+		if tagIds[i], err = uuid.NewV7(); err != nil {
 			return uuid.Nil, err
 		}
-
-		tagsToInsert = append(tagsToInsert, Tag{
-			TagId:   newUUID,
-			TagName: tagName,
-		})
 	}
 
-	_, err = u.DB.Exec(
-		`
-	insert into tags $1
-	on conflict (tag_name) do nothing
-	`, pq.Array(tagsToInsert))
-
-	tagQuery := `
-		select tag_id, tag_name
-		from tags
-		where tag_name = any($1)
-	`
-
-	rows, err := u.DB.QueryContext(ctx, tagQuery, pq.Array(tags))
+	_, err = tx.Exec(ctx, `
+			insert into tags (tag_id, tag_name)
+			select * from unnest($1::uuid[], $2::text[])
+			on conflict (tag_name) do nothing`,
+		tagIds, tags,
+	)
 	if err != nil {
-		return uuid.Nil, err
-	}
-	defer rows.Close()
-
-	var itemTags []ItemTag
-	for rows.Next() {
-		var it ItemTag
-		if err := rows.Scan(&it.TagId, &it.TagName); err != nil {
-			return uuid.Nil, err
-		}
-
-		it.ItemId = itemId
-		itemTags = append(itemTags, it)
+		return uuid.Nil, fmt.Errorf("insert tags: %w", err)
 	}
 
-	itemInsertQuery := `
-		insert into item_tags $1
-		on conflict do nothing
-	`
-	_, err = u.DB.Exec(itemInsertQuery, pq.Array(itemTags))
+	_, err = tx.Exec(ctx, `
+			insert into item_tags (itemid, tag_id)
+			select $1, tag_id from tags where tag_name = any ($2)
+			on conflict do nothing`,
+		itemId, tags,
+	)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("link tags: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return uuid.Nil, err
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("commit: %w", err)
 	}
 
-	return insertedItem, nil
+	return itemId, nil
 }
