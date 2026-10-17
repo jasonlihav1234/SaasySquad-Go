@@ -1,4 +1,4 @@
-package database
+package queries
 
 import (
 	"context"
@@ -79,7 +79,7 @@ func (ir *ItemRepository) CreateItemQuery(
 			values ($1, $2)
 			on conflict (category_name)
 			do update set category_name = excluded.category_name
-			returning category id`,
+			returning category_id`,
 		newCategoryId, strings.ToLower(categoryName),
 	).Scan(&categoryId)
 	if err != nil {
@@ -116,7 +116,7 @@ func (ir *ItemRepository) CreateItemQuery(
 	}
 
 	_, err = tx.Exec(ctx, `
-			insert into item_tags (itemid, tag_id)
+			insert into item_tags (item_id, tag_id)
 			select $1, tag_id from tags where tag_name = any ($2)
 			on conflict do nothing`,
 		itemId, tags,

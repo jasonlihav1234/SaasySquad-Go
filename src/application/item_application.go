@@ -1,37 +1,40 @@
 package application
 
 import (
-	"context"
-	"database/sql"
+	// "context"
+	// "database/sql"
 	"encoding/json"
-	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
-	cognitotypes "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	// cognitotypes "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"strings"
-	"user_application"
+	// "user_application"
+	"SaasySquad-Go/src/database/queries"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"strconv"
 )
 
 type ItemPayload struct {
-	itemName          string
-	description       string
-	price             float64
-	quantityAvailable int
-	imageUrl          string
-	categoryName      string
-	tags              []string
+	ItemName          string
+	Description       string
+	Price             float64
+	QuantityAvailable int
+	ImageUrl          string
+	CategoryName      string
+	Tags              []string
 }
 
-func createItem(cfg aws.Config) http.HandlerFunc {
+func CreateItemHandler(cfg aws.Config, db *pgxpool.Pool) http.HandlerFunc {
 	actor := CognitoActions{
 		cognitoidentityprovider.NewFromConfig(cfg),
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body.Close()
+		defer r.Body.Close()
 
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -66,24 +69,56 @@ func createItem(cfg aws.Config) http.HandlerFunc {
 
 		var payload ItemPayload
 		err = json.NewDecoder(r.Body).Decode(&payload)
-
 		if err != nil {
 			log.Println(err.Error())
 			http.Error(w, "Failed to decode body", 500)
 			return
 		}
 
-		if payload.categoryName == "" ||
-			payload.description == "" ||
-			payload.imageUrl == "" ||
-			payload.itemName == "" ||
-			payload.price == 0.0 ||
-			payload.quantityAvailable == 0 ||
-			len(payload.tags) == 0 {
+		if payload.CategoryName == "" ||
+			payload.Description == "" ||
+			payload.ImageUrl == "" ||
+			payload.ItemName == "" ||
+			payload.Price == 0.0 ||
+			payload.QuantityAvailable == 0 ||
+			len(payload.Tags) == 0 {
 			log.Println("Missing fields in payload")
 			http.Error(w, "Missing fields in item payload", 500)
 			return
 		}
 
+		itemId, err := uuid.NewV7()
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to create item id", 500)
+			return
+		}
+
+		itemRepo := queries.ItemRepository{
+			DB: db,
+		}
+
+		itemOutput, err := itemRepo.CreateItemQuery(itemId,
+			*userId,
+			payload.ItemName,
+			payload.Description,
+			strconv.FormatFloat(payload.Price, 'f', 2, 64),
+			payload.QuantityAvailable,
+			payload.ImageUrl,
+			payload.CategoryName,
+			payload.Tags,
+			r.Context())
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to create item", 500)
+			return
+		}
+
+		err = json.NewEncoder(w).Encode(itemOutput)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to return item", 500)
+			return
+		}
 	}
 }

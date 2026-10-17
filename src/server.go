@@ -158,7 +158,7 @@ func main() {
 
 	http.HandleFunc("GET /", homeHandler)
 	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId))
-	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, cognitoClientId, cognitoUserPoolId, pool))
+	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, adminCfg, cognitoClientId, cognitoUserPoolId, pool))
 	http.HandleFunc("POST /auth/login", application.LoginHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/refresh", application.RefreshHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/logout", application.LogoutHandler(cfg, cognitoClientId))
@@ -166,6 +166,7 @@ func main() {
 	http.HandleFunc("POST /auth/reset-password", application.ConfirmForgotPasswordHandler(cfg, cognitoClientId))
 	http.HandleFunc("GET /profile", application.GetProfileHandler(cfg))
 	http.HandleFunc("GET /users/{email}", application.AdminGetProfileHandler(adminCfg, cognitoUserPoolId))
+	http.HandleFunc("POST /items", application.CreateItemHandler(cfg, pool))
 
 	fmt.Println("Server running on http://localhost:7000")
 

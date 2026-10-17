@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -172,9 +171,12 @@ func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string
 	}
 }
 
-func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, userPoolId string, db *pgxpool.Pool) http.HandlerFunc {
+func ConfirmRegisterHandler(cfg aws.Config, adminCfg aws.Config, cognitoClientId string, userPoolId string, db *pgxpool.Pool) http.HandlerFunc {
 	actor := CognitoActions{
 		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+	adminActor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(adminCfg),
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +207,7 @@ func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, userPoolId s
 			return
 		}
 
-		adminOutput, err := actor.CognitoClient.AdminGetUser(r.Context(), &cognitoidentityprovider.AdminGetUserInput{
+		adminOutput, err := adminActor.CognitoClient.AdminGetUser(r.Context(), &cognitoidentityprovider.AdminGetUserInput{
 			UserPoolId: aws.String(userPoolId),
 			Username:   aws.String(email),
 		})
@@ -231,7 +233,7 @@ func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, userPoolId s
 
 		_, err = db.Exec(r.Context(), `
 				insert into user_v2 (id, email)
-				values ($1::uuid, $2),`,
+				values ($1::uuid, $2)`,
 			userId, email,
 		)
 		if err != nil {
