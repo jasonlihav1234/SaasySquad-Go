@@ -2,12 +2,10 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/lib/pq"
 	"log"
 	"strings"
 	"time"
@@ -63,6 +61,7 @@ func (ir *ItemRepository) CreateItemQuery(
 		tags[i] = strings.ToLower(s)
 	}
 
+	// even if ctx dies mid-request, TCP connection with database severed and rolls back
 	tx, err := ir.DB.Begin(ctx)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("begin tx: %w", err)

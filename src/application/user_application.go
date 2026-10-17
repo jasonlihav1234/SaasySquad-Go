@@ -8,6 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	cognitotypes "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
@@ -141,7 +143,7 @@ func (actor CognitoActions) AdminGetProfile(ctx context.Context, userPoolId stri
 	return output, err
 }
 
-func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
+func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload UserPayload
 		defer r.Body.Close()
@@ -160,16 +162,9 @@ func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string
 			CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
 		}
 
-		userId, err := actor.Register(ctx, cognitoClientId, email, password)
+		_, err = actor.Register(ctx, cognitoClientId, email, password)
 		if err != nil {
 			log.Print("Cognito user failed to create")
-			return
-		}
-
-		_, err = db.Exec("INSERT INTO user_v2 (id, email) VALUES ($1, $2)", userId, email)
-		if err != nil {
-			log.Print(err.Error())
-			http.Error(w, err.Error(), 500)
 			return
 		}
 
@@ -177,7 +172,7 @@ func RegisterHandler(ctx context.Context, cfg aws.Config, cognitoClientId string
 	}
 }
 
-func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
+func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, userPoolId string, db *pgxpool.Pool) http.HandlerFunc {
 	actor := CognitoActions{
 		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
 	}
@@ -210,11 +205,46 @@ func ConfirmRegisterHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) 
 			return
 		}
 
+		adminOutput, err := actor.CognitoClient.AdminGetUser(r.Context(), &cognitoidentityprovider.AdminGetUserInput{
+			UserPoolId: aws.String(userPoolId),
+			Username:   aws.String(email),
+		})
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to confirm user", 500)
+			return
+		}
+
+		var sub string
+		for _, a := range adminOutput.UserAttributes {
+			if aws.ToString(a.Name) == "sub" {
+				sub = aws.ToString(a.Value)
+			}
+		}
+
+		userId, err := uuid.Parse(sub)
+		if err != nil {
+			log.Println("Failed to parse user id")
+			http.Error(w, "Failed to parse user id", 500)
+			return
+		}
+
+		_, err = db.Exec(r.Context(), `
+				insert into user_v2 (id, email)
+				values ($1::uuid, $2),`,
+			userId, email,
+		)
+		if err != nil {
+			log.Print(err.Error())
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
 		fmt.Println("Confirmed User Register")
 	}
 }
 
-func LoginHandler(cfg aws.Config, cognitoClientId string, db *sql.DB) http.HandlerFunc {
+func LoginHandler(cfg aws.Config, cognitoClientId string) http.HandlerFunc {
 	actor := CognitoActions{
 		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
 	}

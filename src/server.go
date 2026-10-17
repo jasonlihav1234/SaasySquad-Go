@@ -3,7 +3,6 @@ package main
 import (
 	"SaasySquad-Go/src/application"
 	"context"
-	"database/sql"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -158,9 +157,9 @@ func main() {
 	cognitoUserPoolId := os.Getenv("COGNITO_USER_POOL_ID")
 
 	http.HandleFunc("GET /", homeHandler)
-	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId, pool))
-	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, cognitoClientId, pool))
-	http.HandleFunc("POST /auth/login", application.LoginHandler(cfg, cognitoClientId, pool))
+	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId))
+	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, cognitoClientId, cognitoUserPoolId, pool))
+	http.HandleFunc("POST /auth/login", application.LoginHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/refresh", application.RefreshHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/logout", application.LogoutHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/forgot-password", application.ForgotPasswordHandler(cfg, cognitoClientId))
