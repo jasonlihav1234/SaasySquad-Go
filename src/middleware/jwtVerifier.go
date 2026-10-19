@@ -59,6 +59,11 @@ func (v *Verifier) VerifyAccessToken(raw string) (*CognitoClaims, error) {
 	return claims, nil
 }
 
+func ClaimsFromContext(ctx context.Context) (*CognitoClaims, bool) {
+	claims, ok := ctx.Value(ctxKey{}).(*CognitoClaims)
+	return claims, ok
+}
+
 func (v *Verifier) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")

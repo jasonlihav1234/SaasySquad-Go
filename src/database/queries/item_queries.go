@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"strings"
@@ -130,4 +131,24 @@ func (ir *ItemRepository) CreateItemQuery(
 	}
 
 	return itemId, nil
+}
+
+func (ir *ItemRepository) GetItemByItemIdQuery(ctx context.Context, itemId string) (*Item, error) {
+	queryString := `
+		select *
+		from items
+		where item_id = $1
+	`
+
+	var itemPayload Item
+	err := ir.DB.QueryRow(ctx, queryString).Scan(&itemPayload)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("User not found")
+		}
+
+		return nil, fmt.Errorf("Query failed: %v", err)
+	}
+
+	return &itemPayload, nil
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	// "user_application"
 	"SaasySquad-Go/src/database/queries"
+	"SaasySquad-Go/src/middleware"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"strconv"
@@ -118,6 +119,61 @@ func CreateItemHandler(cfg aws.Config, db *pgxpool.Pool) http.HandlerFunc {
 		if err != nil {
 			log.Println(err.Error())
 			http.Error(w, "Failed to return item", 500)
+			return
+		}
+	}
+}
+
+func GetItemById(cfg aws.Config, db *pgxpool.Pool) http.HandlerFunc {
+	actor := CognitoActions{
+		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		itemId := r.PathValue("itemId")
+		if itemId == "" {
+			log.Println("No itemId provided")
+			http.Error(w, "No itemId provided", 500)
+			return
+		}
+
+		itemRepo := queries.ItemRepository{
+			DB: db,
+		}
+
+		claims, ok := middleware.ClaimsFromContext(r.Context())
+		if !ok {
+			log.Println("Failed to obtain claim")
+			http.Error(w, "failed to obtain claim", 500)
+			return
+		}
+
+		userStringID := claims.ClientID
+		if userStringID == "" {
+			log.Println("Invalid user id")
+			http.Error(w, "Invalid user id", 500)
+			return
+		}
+
+		userID, err := uuid.Parse(userStringID)
+		if err != nil {
+			log.Println("Failed to convert userID to uuid")
+			http.Error(w, "Failed to convert userID to uuid", 500)
+			return
+		}
+
+		item, err := itemRepo.GetItemByItemIdQuery(r.Context(), itemId)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to get item by item id", 500)
+			return
+		}
+
+		if item.SellerId != userID {
+			log.Println("Seller ID does not match user")
+			http.Error(w, "Seller ID does not match user", 500)
 			return
 		}
 	}
