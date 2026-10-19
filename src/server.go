@@ -2,6 +2,7 @@ package main
 
 import (
 	"SaasySquad-Go/src/application"
+	"SaasySquad-Go/src/middleware"
 	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -156,6 +157,12 @@ func main() {
 	cognitoClientId := os.Getenv("COGNITO_CLIENT_ID")
 	cognitoUserPoolId := os.Getenv("COGNITO_USER_POOL_ID")
 
+	v, err := middleware.NewVerifier(ctx, "ap-southeast-2", cognitoUserPoolId, cognitoClientId)
+	if err != nil {
+		panic(err)
+	}
+
+	// should change to mux, http.HandleFunc is global whilst mux is not
 	http.HandleFunc("GET /", homeHandler)
 	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, adminCfg, cognitoClientId, cognitoUserPoolId, pool))
@@ -164,9 +171,9 @@ func main() {
 	http.HandleFunc("POST /auth/logout", application.LogoutHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/forgot-password", application.ForgotPasswordHandler(cfg, cognitoClientId))
 	http.HandleFunc("POST /auth/reset-password", application.ConfirmForgotPasswordHandler(cfg, cognitoClientId))
-	http.HandleFunc("GET /profile", application.GetProfileHandler(cfg))
-	http.HandleFunc("GET /users/{email}", application.AdminGetProfileHandler(adminCfg, cognitoUserPoolId))
-	http.HandleFunc("POST /items", application.CreateItemHandler(cfg, pool))
+	http.Handle("GET /profile", v.Middleware(application.GetProfileHandler(cfg)))
+	http.Handle("GET /users/{email}", v.Middleware(application.AdminGetProfileHandler(adminCfg, cognitoUserPoolId)))
+	http.Handle("POST /items", v.Middleware(application.CreateItemHandler(cfg, pool)))
 
 	fmt.Println("Server running on http://localhost:7000")
 
