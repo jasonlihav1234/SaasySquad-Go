@@ -203,3 +203,18 @@ func (ir *ItemRepository) GetItemTagsByItemIdQuery(ctx context.Context, itemId s
 
 	return tags, nil
 }
+
+func (ir *ItemRepository) DeleteItemFromIdQuery(ctx context.Context, itemId string) (int64, error) {
+	queryString := `
+		delete
+		form items
+		where item_id = $1
+	`
+
+	response, err := ir.DB.Exec(ctx, queryString, itemId)
+	if err != nil {
+		return -1, fmt.Errorf("query failed: %w", err)
+	}
+
+	return response.RowsAffected(), nil
+}

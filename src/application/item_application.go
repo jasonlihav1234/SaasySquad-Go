@@ -203,3 +203,28 @@ func GetItemByIdHandler(db *pgxpool.Pool) http.HandlerFunc {
 		}
 	}
 }
+
+func DeleteItemHandler(db *pgxpool.Pool) http.HandlerFunc {
+	itemRepo := queries.ItemRepository{
+		DB: db,
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		itemId := r.PathValue("itemId")
+		response, err := itemRepo.DeleteItemFromIdQuery(r.Context(), itemId)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to delete item", 500)
+			return
+		}
+
+		err = json.NewEncoder(w).Encode(response)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to encode delete response", 500)
+			return
+		}
+	}
+}
