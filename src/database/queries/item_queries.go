@@ -29,6 +29,15 @@ type Item struct {
 	CategoryId        uuid.UUID
 }
 
+type Review struct {
+	ReviewID   uuid.UUID
+	UserID     uuid.UUID
+	ItemID     uuid.UUID
+	Review     string
+	ReviewDate time.Time
+	Rating     int
+}
+
 type Tag struct {
 	TagId   uuid.UUID
 	TagName string
@@ -144,11 +153,53 @@ func (ir *ItemRepository) GetItemByItemIdQuery(ctx context.Context, itemId strin
 	err := ir.DB.QueryRow(ctx, queryString).Scan(&itemPayload)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("User not found")
+			return nil, fmt.Errorf("Item not found")
 		}
 
 		return nil, fmt.Errorf("Query failed: %v", err)
 	}
 
 	return &itemPayload, nil
+}
+
+func (ir *ItemRepository) GetReviewsByItemIdQuery(ctx context.Context, itemId string) ([]Review, error) {
+	queryString := `
+		select *
+		from reviews
+		where item_id = $1
+		order by review_date desc
+	`
+
+	rows, err := ir.DB.Query(ctx, queryString, itemId)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	reviews, err := pgx.CollectRows(rows, pgx.RowToStructByName[Review])
+	if err != nil {
+		return nil, fmt.Errorf("collect rreviews for item %s: %w", itemId, err)
+	}
+
+	return reviews, nil
+}
+
+func (ir *ItemRepository) GetItemTagsByItemIdQuery(ctx context.Context, itemId string) ([]string, error) {
+	queryString := `
+		select t.tag_name
+		from item_tags it
+		join tags t on it.tag_id == t.tag_id
+		where it.item_id = $1
+	`
+
+	rows, err := ir.DB.Query(ctx, queryString, itemId)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	tags, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("collect tags for item: %s: %w", itemId, err)
+	}
+
+	return tags, nil
 }

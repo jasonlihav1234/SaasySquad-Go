@@ -1,22 +1,18 @@
 package application
 
 import (
-	// "context"
-	// "database/sql"
+	"SaasySquad-Go/src/database/queries"
+	"SaasySquad-Go/src/middleware"
 	"encoding/json"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
-	// cognitotypes "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
-	"strings"
-	// "user_application"
-	"SaasySquad-Go/src/database/queries"
-	"SaasySquad-Go/src/middleware"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"strconv"
+	"strings"
 )
 
 type ItemPayload struct {
@@ -27,6 +23,12 @@ type ItemPayload struct {
 	ImageUrl          string
 	CategoryName      string
 	Tags              []string
+}
+
+type ItemWithDetails struct {
+	queries.Item
+	ItemTags []string         `json:"itemTags"`
+	Reviews  []queries.Review `json:"reviews"`
 }
 
 func CreateItemHandler(cfg aws.Config, db *pgxpool.Pool) http.HandlerFunc {
@@ -124,11 +126,7 @@ func CreateItemHandler(cfg aws.Config, db *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
-func GetItemById(cfg aws.Config, db *pgxpool.Pool) http.HandlerFunc {
-	actor := CognitoActions{
-		CognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
-	}
-
+func GetItemByIdHandler(db *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -174,6 +172,33 @@ func GetItemById(cfg aws.Config, db *pgxpool.Pool) http.HandlerFunc {
 		if item.SellerId != userID {
 			log.Println("Seller ID does not match user")
 			http.Error(w, "Seller ID does not match user", 500)
+			return
+		}
+
+		itemTags, err := itemRepo.GetItemTagsByItemIdQuery(r.Context(), itemId)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to obtain item tags", 500)
+			return
+		}
+
+		review, err := itemRepo.GetReviewsByItemIdQuery(r.Context(), itemId)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to obtain review", 500)
+			return
+		}
+
+		itemWithTags := ItemWithDetails{
+			*item,
+			itemTags,
+			review,
+		}
+
+		err = json.NewEncoder(w).Encode(itemWithTags)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to encode item with tags", 500)
 			return
 		}
 	}
