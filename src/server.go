@@ -174,6 +174,8 @@ func main() {
 	http.Handle("GET /profile", v.Middleware(application.GetProfileHandler(cfg)))
 	http.Handle("GET /users/{email}", v.Middleware(application.AdminGetProfileHandler(adminCfg, cognitoUserPoolId)))
 	http.Handle("POST /items", v.Middleware(application.CreateItemHandler(cfg, pool)))
+	http.Handle("GET /items/{itemId}", v.Middleware(application.GetItemByIdHandler(pool)))
+	http.Handle("DELETE /items/{itemId}", v.Middleware(application.DeleteItemHandler(pool)))
 
 	fmt.Println("Server running on http://localhost:7000")
 
