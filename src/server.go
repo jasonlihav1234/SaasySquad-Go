@@ -176,6 +176,7 @@ func main() {
 	http.Handle("POST /items", v.Middleware(application.CreateItemHandler(cfg, pool)))
 	http.Handle("GET /items/{itemId}", v.Middleware(application.GetItemByIdHandler(pool)))
 	http.Handle("DELETE /items/{itemId}", v.Middleware(application.DeleteItemHandler(pool)))
+	http.Handle("GET /items/tags", v.Middleware(application.GetAllTags(pool)))
 
 	fmt.Println("Server running on http://localhost:7000")
 

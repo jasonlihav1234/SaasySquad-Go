@@ -228,3 +228,33 @@ func DeleteItemHandler(db *pgxpool.Pool) http.HandlerFunc {
 		}
 	}
 }
+
+func GetAllTags(db *pgxpool.Pool) http.HandlerFunc {
+	itemRepo := queries.ItemRepository{
+		DB: db,
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		response, err := itemRepo.GetAllTagsQuery(r.Context())
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to obtain tags", 500)
+			return
+		}
+
+		if len(response) == 0 {
+			log.Println("No tags found")
+			http.Error(w, "No tags found", 500)
+			return
+		}
+
+		err = json.NewEncoder(w).Encode(response)
+		if err != nil {
+			log.Println("Failed to encode tags")
+			http.Error(w, "Failed to encode tags", 500)
+			return
+		}
+	}
+}

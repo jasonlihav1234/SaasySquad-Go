@@ -218,3 +218,22 @@ func (ir *ItemRepository) DeleteItemFromIdQuery(ctx context.Context, itemId stri
 
 	return response.RowsAffected(), nil
 }
+
+func (ir *ItemRepository) GetAllTagsQuery(ctx context.Context) ([]Tag, error) {
+	queryString := `
+		select *
+		from tags
+	`
+
+	rows, err := ir.DB.Query(ctx, queryString)
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := pgx.CollectRows(rows, pgx.RowTo[Tag])
+	if err != nil {
+		return nil, err
+	}
+
+	return tags, nil
+}
