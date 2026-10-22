@@ -8,12 +8,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 type CognitoActions struct {
@@ -162,23 +164,30 @@ func main() {
 		panic(err)
 	}
 
+	mux := http.NewServeMux()
 	// should change to mux, http.HandleFunc is global whilst mux is not
-	http.HandleFunc("GET /", homeHandler)
-	http.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId))
-	http.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, adminCfg, cognitoClientId, cognitoUserPoolId, pool))
-	http.HandleFunc("POST /auth/login", application.LoginHandler(cfg, cognitoClientId))
-	http.HandleFunc("POST /auth/refresh", application.RefreshHandler(cfg, cognitoClientId))
-	http.HandleFunc("POST /auth/logout", application.LogoutHandler(cfg, cognitoClientId))
-	http.HandleFunc("POST /auth/forgot-password", application.ForgotPasswordHandler(cfg, cognitoClientId))
-	http.HandleFunc("POST /auth/reset-password", application.ConfirmForgotPasswordHandler(cfg, cognitoClientId))
-	http.Handle("GET /profile", v.Middleware(application.GetProfileHandler(cfg)))
-	http.Handle("GET /users/{email}", v.Middleware(application.AdminGetProfileHandler(adminCfg, cognitoUserPoolId)))
-	http.Handle("POST /items", v.Middleware(application.CreateItemHandler(cfg, pool)))
-	http.Handle("GET /items/{itemId}", v.Middleware(application.GetItemByIdHandler(pool)))
-	http.Handle("DELETE /items/{itemId}", v.Middleware(application.DeleteItemHandler(pool)))
-	http.Handle("GET /items/tags", v.Middleware(application.GetAllTags(pool)))
+	mux.HandleFunc("GET /", homeHandler)
+	mux.HandleFunc("POST /auth/register", application.RegisterHandler(ctx, cfg, cognitoClientId))
+	mux.HandleFunc("POST /auth/register/confirm", application.ConfirmRegisterHandler(cfg, adminCfg, cognitoClientId, cognitoUserPoolId, pool))
+	mux.HandleFunc("POST /auth/login", application.LoginHandler(cfg, cognitoClientId))
+	mux.HandleFunc("POST /auth/refresh", application.RefreshHandler(cfg, cognitoClientId))
+	mux.HandleFunc("POST /auth/logout", application.LogoutHandler(cfg, cognitoClientId))
+	mux.HandleFunc("POST /auth/forgot-password", application.ForgotPasswordHandler(cfg, cognitoClientId))
+	mux.HandleFunc("POST /auth/reset-password", application.ConfirmForgotPasswordHandler(cfg, cognitoClientId))
+	mux.Handle("GET /profile", v.Middleware(application.GetProfileHandler(cfg)))
+	mux.Handle("GET /users/{email}", v.Middleware(application.AdminGetProfileHandler(adminCfg, cognitoUserPoolId)))
+	mux.Handle("POST /items", v.Middleware(application.CreateItemHandler(cfg, pool)))
+	mux.Handle("GET /items/{itemId}", v.Middleware(application.GetItemByIdHandler(pool)))
+	mux.Handle("DELETE /items/{itemId}", v.Middleware(application.DeleteItemHandler(pool)))
+	mux.Handle("GET /items/tags", v.Middleware(application.GetAllTags(pool)))
+
+	server := &http.Server{
+		Handler:      mux,
+		Addr:         "127.0.0.1:7000",
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
 
 	fmt.Println("Server running on http://localhost:7000")
-
-	log.Fatal(http.ListenAndServe(":7000", nil))
+	log.Fatal(server.ListenAndServe())
 }
