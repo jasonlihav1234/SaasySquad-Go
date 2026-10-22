@@ -49,6 +49,15 @@ type ItemTag struct {
 	TagName string
 }
 
+type ItemUpdate struct {
+	ItemName          *string
+	Description       *string
+	Price             *float64
+	QuantityAvailable *int
+	ImageUrl          *string
+	CategoryName      *string
+}
+
 func (ir *ItemRepository) CreateItemQuery(
 	itemId uuid.UUID,
 	sellerId string,
@@ -236,4 +245,73 @@ func (ir *ItemRepository) GetAllTagsQuery(ctx context.Context) ([]Tag, error) {
 	}
 
 	return tags, nil
+}
+
+func (ir *ItemRepository) UpdateItemQuery(ctx context.Context, itemId string, upd ItemUpdate) (*Item, error) {
+	tx, err := ir.DB.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var categoryId *string
+	if upd.CategoryName != nil && *upd.CategoryName != "" {
+		name := strings.ToLower(*upd.CategoryName)
+
+		var id string
+		err := tx.QueryRow(ctx, `
+			insert into categories (category_id, category_name)
+			values (gen_random_uuid(), $1)
+			on conflict (category_name)
+			do update set category_name = excluded.category_name
+			returning category_id`,
+			name,
+		).Scan(&id)
+
+		if err != nil {
+			return nil, fmt.Errorf("upsert category: %w", err)
+		}
+
+		categoryId = &id
+	}
+
+	rows, err := tx.Query(ctx, `
+			update items
+			set
+				item_name = coalesece($2, item_name),
+				description = coalesce($3, description),
+				price = coalesce($4, price),
+				quantity_available = coalesce($5, quantity_available),
+				image_url = coalesce($6, image_url),
+				last_updated = now(),
+				category_id = coalesce($7::uuid, category_id)
+			where item_id = $1
+			returning item_id, iten_name, description, price,
+					  quantity_available, image_url, last_updated, category_id`,
+		itemId,
+		upd.ItemName,
+		upd.Description,
+		upd.Price,
+		upd.QuantityAvailable,
+		upd.ImageUrl,
+		categoryId,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update item: %w", err)
+	}
+
+	item, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[Item])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("Item not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scan item: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &item, nil
 }

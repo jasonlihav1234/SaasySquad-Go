@@ -258,3 +258,42 @@ func GetAllTags(db *pgxpool.Pool) http.HandlerFunc {
 		}
 	}
 }
+
+func UpdateItemHandler(db *pgxpool.Pool) http.HandlerFunc {
+	itemRepo := queries.ItemRepository{
+		DB: db,
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		itemId := r.PathValue("itemId")
+		if itemId == "" {
+			log.Println("No itemId provided")
+			http.Error(w, "No itemId provided", 500)
+			return
+		}
+
+		var itemUpdatePayload queries.ItemUpdate
+		err := json.NewDecoder(r.Body).Decode(&itemUpdatePayload)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "No item payload provided", 500)
+			return
+		}
+
+		response, err := itemRepo.UpdateItemQuery(r.Context(), itemId, itemUpdatePayload)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to update item", 500)
+			return
+		}
+
+		err = json.NewEncoder(w).Encode(response)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Failed to encode response", 500)
+			return
+		}
+	}
+}
